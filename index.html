@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aviation & Climate Impact Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/6.26.0/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+    <style> {/* Styles remain the same */}
+        .node { cursor: pointer; transition: box-shadow 0.2s ease-in-out; }
+        .node:hover { box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); }
+        .link-line { stroke-width: 4; cursor: pointer; transition: stroke 0.2s ease, opacity 0.2s ease; }
+        .link-line:hover { opacity: 0.7; }
+        .correct-link { stroke: green; }
+        .incorrect-link { stroke: red; }
+        .feedback-link { stroke: #0077cc; }
+        .link-text { font-size: 10px; font-weight: normal; text-anchor: middle; fill: #333; pointer-events: none; text-shadow: 0px 0px 3px white; }
+        .correct-text { fill: green; font-weight: bold; }
+        .incorrect-text { fill: red; font-weight: bold; }
+        .feedback-text { fill: #0077cc; font-weight: bold; }
+        .explanation-panel { flex-grow: 1; overflow-y: auto; }
+        .node-rect { transition: fill 0.2s ease; }
+        .node-rect-linking { fill-opacity: 0.7; stroke-dasharray: 4; stroke: #3498db; }
+        .side-panel-arrow { font-size: 1.1rem; line-height: 1; }
+    </style>
+</head>
+
+<body class="overflow-hidden">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // --- Aviation Climate Concepts (Single Icons) ---
+        const climateConcepts = [
+            // Causes
+            { id: 1, title: "Jet Fuel Combustion", icon: "⛽", description: "Burning kerosene-based jet fuel in engines releases various emissions into the atmosphere.", source: "https://atag.org/media/gw5cgzzh/fact-sheet_2_aviation-and-climate-change.pdf", color: "bg-gray-400", type: "cause" },
+            { id: 2, title: "CO2 Emissions", icon: "💨", description: "Aviation accounts for ~2% of global direct CO2 emissions. CO2 is a long-lived greenhouse gas contributing significantly to warming.", source: "https://www.icao.int/environmental-protection/Pages/scientific-understanding.aspx", color: "bg-gray-500", type: "cause" },
+            { id: 3, title: "Non-CO2 Emissions", icon: "🧪", description: "Includes Nitrogen Oxides (NOx), soot, water vapor, and sulfur oxides, which have complex effects on atmospheric chemistry and climate.", source: "https://atag.org/media/gw5cgzzh/fact-sheet_2_aviation-and-climate-change.pdf", color: "bg-orange-300", type: "cause" },
+            { id: 4, title: "Contrail Formation", icon: "☁️", description: "Water vapor & soot from exhaust can form persistent ice clouds (contrails) in specific cold, humid atmospheric conditions.", source: "https://atag.org/media/wnqc3v41/fact-sheet_20_contrails_june-2024.pdf", color: "bg-cyan-300", type: "cause" },
+            { id: 13, title: "Upstream Fuel Emissions", icon: "🏭", description: "GHG emissions released during the extraction, refining, and transportation of fossil jet fuel *before* it's burned.", source: "https://www.airbus.com/en/sustainability/respecting-the-planet/scope-3-disclosure", color: "bg-orange-200", type: "cause"},
+
+            // Impacts
+            { id: 5, title: "Radiative Forcing", icon: "✨", description: "The overall change in Earth's energy balance. Aviation's total impact includes CO2 and significant non-CO2 effects like contrails.", source: "https://atag.org/media/wnqc3v41/fact-sheet_20_contrails_june-2024.pdf", color: "bg-yellow-400", type: "impact" },
+            { id: 6, title: "Global Warming", icon: "🌡️", description: "Aviation contributes an estimated 3.5% of total human-caused warming when all effects (CO2 and non-CO2) are considered.", source: "https://www.icao.int/environmental-protection/Pages/scientific-understanding.aspx", color: "bg-red-400", type: "impact" },
+
+            // Solutions
+            { id: 7, title: "Sustainable Fuels (SAF)", icon: "🌱", description: "Using biofuels or synthetic fuels made from renewable sources can reduce lifecycle CO2 emissions by up to 80% compared to fossil jet fuel.", source: "https://www.chooose.today/resources/learning-resources/benefits-and-considerations-of-sustainable-aviation-fuel", color: "bg-green-300", type: "solution" },
+            { id: 8, title: "Aircraft Efficiency", icon: "⚙️", description: "Improving engine technology, aerodynamics, and using lighter materials to reduce fuel burn per passenger-kilometer.", source: "https://theicct.org/pr-aircraft-efficiency-improvements-have-stalled-stronger-standards-needed-feb25/", color: "bg-blue-300", type: "solution" },
+            { id: 9, title: "Operational Improvements", icon: "🗺️", description: "Optimizing flight routes, speeds, and altitudes, including potentially avoiding areas prone to forming warming contrails.", source: "https://atag.org/media/wnqc3v41/fact-sheet_20_contrails_june-2024.pdf", color: "bg-indigo-300", type: "solution" },
+            { id: 10, title: "Electric/Hydrogen Aircraft", icon: "⚡", description: "Future technologies aiming for zero in-flight CO2 emissions, though challenges remain with battery density, hydrogen storage, and infrastructure.", source: "https://ce.nl/wp-content/uploads/2025/02/CE_Delft_240152_Climate_Change_Impact_Analysis_of_Electric_Aviation_Def_.pdf", color: "bg-purple-300", type: "solution" },
+            { id: 11, title: "CORSIA Scheme", icon: "🌍", description: "An ICAO market-based measure requiring airlines to offset growth in international CO2 emissions above 85% of 2019 levels.", source: "https://aviationbenefits.org/environmental-efficiency/climate-action/market-based-measures/corsia/corsia-explained/", color: "bg-teal-300", type: "solution" },
+            { id: 14, title: "Winglets & Aerodynamics", icon: "📐", description: "Wingtip devices and refined wing shapes reduce aerodynamic drag, cutting fuel consumption by 1-10% depending on aircraft and route.", source: "https://www.cirium.com/thoughtcloud/impact-winglets-on-fuel-consumption-and-aircraft-emissions/", color: "bg-cyan-200", type: "solution"},
+            { id: 15, title: "EU ETS", icon: "🇪🇺", description: "The EU Emissions Trading System requires airlines to monitor and surrender allowances for CO2 emissions on flights within the European Economic Area.", source: "https://www.homaio.com/post/what-are-the-aviation-emissions-covered-by-the-eu-ets", color: "bg-yellow-200", type: "solution"},
+            { id: 16, title: "Research & Development", icon: "🔬", description: "Investment and innovation are crucial for developing and maturing new technologies like advanced SAFs, hydrogen/electric propulsion, and materials.", source: "https://joint-research-centre.ec.europa.eu/jrc-news-and-updates/reducing-air-travel-climate-effects-requires-more-technological-innovation-and-carbon-pricing-2024-12-09_en", color: "bg-gray-200", type: "solution"},
+
+
+             // Feedbacks
+             { id: 12, title: "Contrail Warming Effect", icon: "🌥️", description: "Persistent contrails can spread and act like artificial cirrus clouds, trapping heat radiated from Earth, especially at night, leading to a net warming effect.", source: "https://atag.org/media/wnqc3v41/fact-sheet_20_contrails_june-2024.pdf", color: "bg-pink-300", type: "feedback" }, // Changed icon slightly for distinction
+        ];
+
+        // --- Aviation Relationships (Unchanged from previous step) ---
+        const correctRelationships = [
+            { source: 1, target: 2 }, { source: 1, target: 3 }, { source: 1, target: 4 }, { source: 13, target: 2 }, { source: 3, target: 5 }, { source: 4, target: 5 }, { source: 2, target: 6 }, { source: 5, target: 6 },
+            { source: 7, target: 1 }, { source: 8, target: 1 }, { source: 9, target: 1 }, { source: 9, target: 4 }, { source: 10, target: 1 }, { source: 11, target: 2 }, { source: 14, target: 8 }, { source: 15, target: 2 }, { source: 16, target: 7 }, { source: 16, target: 8 }, { source: 16, target: 10 },
+            { source: 5, target: 12 }, { source: 12, target: 6, type: 'feedback' }
+        ];
+
+
+        function ClimateActionAdventure() {
+            // --- Node Distribution Logic (Unchanged) ---
+            const distributeNodesEvenly = (concepts) => { const nodeSize = { width: 100, height: 120 }; const svgWidth = window.innerWidth - 320; const svgHeight = window.innerHeight; const padding = 20; const positions = {}; const columns = Math.max(1, Math.floor((svgWidth - 2 * padding) / nodeSize.width)); let colIndex = 0, rowIndex = 0; concepts.forEach(concept => { const x = padding + colIndex * nodeSize.width + (nodeSize.width / 2 - 25); const y = padding + rowIndex * nodeSize.height; positions[concept.id] = { x, y }; colIndex++; if (colIndex >= columns) { colIndex = 0; rowIndex++; } }); return concepts.map(c => ({ ...c, x: positions[c.id].x, y: positions[c.id].y })); };
+
+            // --- State Hooks (Unchanged structure) ---
+            const [nodes, setNodes] = React.useState(() => distributeNodesEvenly(climateConcepts));
+            const [links, setLinks] = React.useState([]);
+            const [linkingSource, setLinkingSource] = React.useState(null);
+            const [selectedNode, setSelectedNode] = React.useState(null);
+            const [draggedNode, setDraggedNode] = React.useState(null);
+            const [correctCount, setCorrectCount] = React.useState(0);
+            const [showCongrats, setShowCongrats] = React.useState(false);
+            const totalPossibleRelationships = correctRelationships.length;
+
+             // --- Event Handlers (Unchanged) ---
+             const handleNodeClick = (nodeId) => { if (linkingSource === null) { setSelectedNode(nodes.find(node => node.id === nodeId)); } };
+             const handleRightClick = (nodeId, event) => { event.preventDefault(); if (linkingSource === null) { setLinkingSource(nodeId); setSelectedNode(null); } else if (linkingSource !== nodeId) { const linkExists = links.some(l => (l.source === linkingSource && l.target === nodeId) || (l.source === nodeId && l.target === linkingSource)); if (!linkExists) { const isCorrect = correctRelationships.some(r => (r.source === linkingSource && r.target === nodeId) || (r.source === nodeId && r.target === linkingSource && r.type === 'feedback')); const feedbackRel = correctRelationships.find(r => ((r.source === linkingSource && r.target === nodeId) || (r.source === nodeId && r.target === linkingSource)) && r.type === 'feedback'); setLinks([...links, { source: linkingSource, target: nodeId, isCorrect, type: (isCorrect && feedbackRel && feedbackRel.type) || 'causal' }]); } setLinkingSource(null); } else { setLinkingSource(null); } };
+             const handleMouseDown = (nodeId, event) => { if (event.button !== 2) { const node = nodes.find(n => n.id === nodeId); setSelectedNode(null); setLinkingSource(null); setDraggedNode({ node, offsetX: event.clientX - node.x, offsetY: event.clientY - node.y, initialX: node.x, initialY: node.y }); } };
+             const handleMouseMove = (event) => { if (draggedNode) { setNodes(nodes.map(n => n.id === draggedNode.node.id ? { ...n, x: event.clientX - draggedNode.offsetX, y: event.clientY - draggedNode.offsetY } : n)); } };
+             const handleMouseUp = (event) => { if (draggedNode) { const currentNodeState = nodes.find(n => n.id === draggedNode.node.id); if (currentNodeState) { const movedDistance = Math.sqrt(Math.pow(currentNodeState.x - draggedNode.initialX, 2) + Math.pow(currentNodeState.y - draggedNode.initialY, 2)); if (movedDistance < 5 && event.button !== 2) { handleNodeClick(draggedNode.node.id); } } setDraggedNode(null); } if (event.button === 2 && !event.target.closest('.node')) { setLinkingSource(null); } };
+             const handleMouseLeave = (event) => { if (draggedNode) { setDraggedNode(null); } };
+             const closePanel = () => { setSelectedNode(null); };
+             const deleteLink = (indexToDelete) => { setLinks(currentLinks => currentLinks.filter((_, index) => index !== indexToDelete)); };
+
+             // --- Effect Hook for Score (Unchanged) ---
+            React.useEffect(() => { const currentCorrectLinks = new Set(); links.forEach(link => { const isActuallyCorrect = correctRelationships.some(rel => (rel.source === link.source && rel.target === link.target) || (rel.source === link.target && rel.target === link.source && rel.type === 'feedback')); if (isActuallyCorrect) { const key = (link.type === 'feedback' && link.source > link.target) ? `${link.target}-${link.source}` : `${link.source}-${link.target}`; currentCorrectLinks.add(key); } }); const newCorrectCount = currentCorrectLinks.size; setCorrectCount(newCorrectCount); setShowCongrats(newCorrectCount === totalPossibleRelationships); }, [links, totalPossibleRelationships]);
+
+             // --- SmartArrow Component (Unchanged) ---
+            const SmartArrow = ({ sourceId, targetId, isCorrect, type, onDelete }) => { const sourceNode = nodes.find(node => node.id === sourceId); const targetNode = nodes.find(node => node.id === targetId); if (!sourceNode || !targetNode) return null; let arrowColor = "red", markerId = "arrowhead-incorrect"; if (isCorrect) { if (type === 'feedback') { arrowColor = "#0077cc"; markerId = "arrowhead-feedback"; } else { arrowColor = "green"; markerId = "arrowhead-correct"; } } const nodeSize = 50; const dx = targetNode.x - sourceNode.x, dy = targetNode.y - sourceNode.y; const dist = Math.sqrt(dx * dx + dy * dy); if (dist === 0) return null; const startPadding = nodeSize / 2, endPadding = nodeSize / 2 + 10; const startX = sourceNode.x + nodeSize / 2 + (dx * startPadding) / dist; const startY = sourceNode.y + nodeSize / 2 + (dy * startPadding) / dist; const endX = targetNode.x + nodeSize / 2 - (dx * endPadding) / dist; const endY = targetNode.y + nodeSize / 2 - (dy * endPadding) / dist; return (<g><line x1={startX} y1={startY} x2={endX} y2={endY} stroke={arrowColor} strokeWidth="3" className="link-line" markerEnd={`url(#${markerId})`} onClick={onDelete} /><line x1={startX} y1={startY} x2={endX} y2={endY} stroke="transparent" strokeWidth="15" style={{ cursor: 'pointer' }} onClick={onDelete} /></g>); };
+
+            // --- Main Render (Structure Unchanged, Text Unchanged) ---
+            return (
+                <div className="relative w-full h-screen flex bg-gray-50" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave}>
+                    {/* SVG Canvas */}
+                     <svg width="calc(100% - 320px)" height="100%" className="bg-gradient-to-br from-sky-100 via-white to-emerald-100">
+                        <defs>
+                            <marker id="arrowhead-correct" markerWidth="10" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="strokeWidth"><polygon points="0 0, 10 3.5, 0 7" fill="green" /></marker>
+                            <marker id="arrowhead-incorrect" markerWidth="10" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="strokeWidth"><polygon points="0 0, 10 3.5, 0 7" fill="red" /></marker>
+                            <marker id="arrowhead-feedback" markerWidth="10" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="strokeWidth"><polygon points="0 0, 10 3.5, 0 7" fill="#0077cc" /></marker>
+                        </defs>
+                        {links.map((link, index) => <SmartArrow key={`${link.source}-${link.target}-${index}`} sourceId={link.source} targetId={link.target} isCorrect={link.isCorrect} type={link.type} onDelete={() => deleteLink(index)} />)}
+                        {nodes.map(node => (
+                             <g key={node.id} transform={`translate(${node.x},${node.y})`} className="node" onClick={(e) => { if (!draggedNode && e.button !== 2) handleNodeClick(node.id); }} onMouseDown={(e) => handleMouseDown(node.id, e)} onContextMenu={(e) => handleRightClick(node.id, e)}>
+                                 <rect width="50" height="50" rx="10" ry="10" fill="white" stroke={linkingSource === node.id ? "#3498db" : "black"} strokeWidth={linkingSource === node.id ? "3" : "1"} className={`${node.color} node-rect ${linkingSource === node.id ? 'node-rect-linking' : ''}`} />
+                                 <text x="25" y="32" textAnchor="middle" fontSize="24" pointerEvents="none" fill="#333">{node.icon}</text>
+                                 <text x="25" y="65" textAnchor="middle" fontSize="10" pointerEvents="none" fill="#333">{node.title}</text>
+                             </g>
+                         ))}
+                         {linkingSource && nodes.find(n => n.id === linkingSource) && <circle cx={nodes.find(n => n.id === linkingSource).x + 25} cy={nodes.find(n => n.id === linkingSource).y + 25} r="5" fill="#3498db" pointerEvents="none"><animate attributeName="r" from="5" to="10" dur="0.8s" repeatCount="indefinite" /></circle>}
+                    </svg>
+
+                     {/* Side Panel */}
+                     <div className="w-80 flex-shrink-0 border-l border-gray-300 shadow-lg flex flex-col h-screen">
+                         {selectedNode ? (
+                             <div className="explanation-panel bg-white p-4">
+                                 <h2 className="text-xl font-bold mb-2 flex items-center"><span className="text-2xl mr-2">{selectedNode.icon}</span>{selectedNode.title}</h2>
+                                 <p className="text-sm text-gray-700 mb-3">{selectedNode.description}</p>
+                                 {selectedNode.source && selectedNode.source !== "#" && <a href={selectedNode.source} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline text-xs mb-4 block">Learn more...</a>}
+                                 <button onClick={closePanel} className="mt-4 w-full bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded text-sm">Close</button>
+                             </div>
+                         ) : (
+                            <div className="explanation-panel bg-gray-100 p-4 text-gray-600">
+                                <h3 className="font-semibold text-lg mb-2">Aviation & Climate Impact</h3>
+                                <p className="text-sm mb-3">
+                                     Explore how the aviation industry impacts climate change and the potential solutions. Connect the concepts by drawing lines - can you find all the relationships? Your progress is tracked below.
+                                </p>
+                                <p className="text-sm mb-2">How to play:</p>
+                                <ul className="text-xs list-disc list-inside space-y-1">
+                                    <li><span className="font-semibold">Click</span> a card to learn more.</li>
+                                    <li><span className="font-semibold">Right-click</span> a card to start drawing a connection (it will glow blue).</li>
+                                    <li><span className="font-semibold">Right-click</span> a second card to complete the connection.</li>
+                                     <li>Connections show correct causes/effects (<span className="text-green-600 font-bold side-panel-arrow">→</span>) and feedback loops (<span className="text-blue-600 font-bold side-panel-arrow">→</span>).</li>
+                                    <li>Incorrect links are shown in red (<span className="text-red-600 font-bold side-panel-arrow">→</span>).</li>
+                                    <li><span className="font-semibold">Click</span> a line/arrow to remove it.</li>
+                                    <li><span className="font-semibold">Drag</span> cards to rearrange the layout.</li>
+                                </ul>
+                                <div className="mt-3 text-xs italic">
+                                    Tip: Right-clicking the background cancels drawing a connection.
+                                </div>
+                            </div>
+                         )}
+                    </div>
+
+                     {/* Score Counter */}
+                     <div className="absolute bottom-4 left-4 bg-white p-3 rounded shadow-md border border-gray-200 z-10">
+                        <p className="text-sm font-semibold">Correct Relationships: {correctCount} / {totalPossibleRelationships}</p>
+                         {showCongrats && <p className="text-green-600 font-bold text-base mt-1">Congratulations! You found all the relationships!</p>}
+                    </div>
+                </div>
+            );
+        }
+
+        // Render the component
+        ReactDOM.render(<ClimateActionAdventure />, document.getElementById('root'));
+
+    </script>
+</body>
+
+</html>
